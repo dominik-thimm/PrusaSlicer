@@ -382,6 +382,8 @@ set(SLIC3R_SOURCES
     Tesselate.cpp
     Tesselate.hpp
     TextConfiguration.hpp
+    Transfer/TransferExporter.cpp
+    Transfer/TransferExporter.hpp
     TriangleMesh.cpp
     TriangleMesh.hpp
     TriangleMeshSlicer.cpp
@@ -621,6 +623,7 @@ target_include_directories(libslic3r PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMA
 target_include_directories(libslic3r PUBLIC ${EXPAT_INCLUDE_DIRS})
 
 find_package(JPEG REQUIRED)
+find_package(TIFF MODULE REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 target_link_libraries(libslic3r PRIVATE
@@ -637,6 +640,7 @@ target_link_libraries(libslic3r PRIVATE
     libslic3r_cgal
     ${CMAKE_DL_LIBS}
     PNG::PNG
+    TIFF::TIFF
     ZLIB::ZLIB
 	JPEG::JPEG
     qoi

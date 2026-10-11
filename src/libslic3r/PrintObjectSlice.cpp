@@ -6,7 +6,10 @@
 #include <oneapi/tbb/blocked_range.h>
 #include <oneapi/tbb/parallel_for.h>
 #include <algorithm>
+#include <cstdlib>
+#include <exception>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -21,6 +24,7 @@
 #include "MultiMaterialSegmentation.hpp"
 #include "Print.hpp"
 #include "ShortestPath.hpp"
+#include "Transfer/TransferExporter.hpp"
 #include "admesh/stl.h"
 #include "libslic3r/Feature/Interlocking/InterlockingGenerator.hpp"
 #include "libslic3r/Feature/FullSpectrum/VirtualExtruder.hpp"
@@ -575,6 +579,69 @@ void PrintObject::slice()
         });
     if (m_layers.empty())
         throw Slic3r::SlicingError("No layers were detected. You might want to repair your STL file(s) or check their size or thickness and retry.\n");    
+    // Transfer diagnostics and optional TIFF export.
+    {
+        const Layer &layer = *m_layers[m_layers.size() / 2];
+
+        double area_mm2 = 0.0;
+        size_t hole_count = 0;
+
+        for (const ExPolygon &polygon : layer.lslices) {
+            area_mm2 += polygon.area() * SCALING_FACTOR * SCALING_FACTOR;
+            hole_count += polygon.holes.size();
+        }
+
+        std::cerr
+            << "[Transfer]"
+            << " layers=" << m_layers.size()
+            << " selected_layer=" << (layer.id() + 1)
+            << " slice_z_mm=" << layer.slice_z
+            << " print_z_mm=" << layer.print_z
+            << " polygons=" << layer.lslices.size()
+            << " holes=" << hole_count
+            << " area_mm2=" << area_mm2
+            << std::endl;
+
+        const char *export_enabled = std::getenv("TRANSFER_TIFF_EXPORT");
+        if (export_enabled != nullptr && std::string(export_enabled) == "1") {
+            if (m_print->objects().size() != 1 || this->instances().size() != 1) {
+                std::cerr << "[Transfer] TIFF export skipped: "
+                          << "expected one object and one instance."
+                          << std::endl;
+            } else {
+                m_print->throw_if_canceled();
+                try {
+                    const transfer::TransferExportConfig export_config =
+                        transfer::load_transfer_export_config(
+                            get_bed_shape(m_print->config()), "transfer_export.json");
+                    std::cerr << "[Transfer] TIFF raster: " << export_config.width_px << 'x'
+                              << export_config.height_px << " pixels, "
+                              << export_config.pixel_size_mm << " mm/pixel." << std::endl;
+                    const std::string output_directory =
+                        transfer::create_transfer_export_directory();
+                    std::cerr << "[Transfer] TIFF export directory: " << output_directory
+                              << std::endl;
+
+                    const Point &instance_shift = this->instances().front().shift;
+                    for (const Layer *export_layer : m_layers) {
+                        m_print->throw_if_canceled();
+                        const std::string filename = transfer::export_transfer_layer(
+                            *export_layer, instance_shift, export_config, output_directory);
+                        std::cerr << "[Transfer] TIFF written: " << filename << std::endl;
+                    }
+
+                    std::cerr << "[Transfer] TIFF export complete: " << m_layers.size()
+                              << " layers." << std::endl;
+                } catch (const CanceledException &) {
+                    // Let the slicer handle cancellation instead of reporting an export error.
+                    throw;
+                } catch (const std::exception &error) {
+                    std::cerr << "[Transfer] TIFF export failed: " << error.what()
+                              << std::endl;
+                }
+            }
+        }
+    }
     this->set_done(posSlice);
 }
 

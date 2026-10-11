@@ -1,6 +1,7 @@
 Build
 Build.bat
 /build/
+/output/
 MYMETA.json
 MYMETA.yml
 _build
