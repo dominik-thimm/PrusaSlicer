@@ -2,7 +2,6 @@
 set -e
 
 echo "Building PrusaSlicer..."
-cmake --build build -j4
+cmake --build build --target prusa-slicer -j4
 
 echo "Build finished successfully."
-
